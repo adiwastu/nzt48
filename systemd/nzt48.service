@@ -1,0 +1,8 @@
+[Unit]
+Description=NZT-48 Market Scanner
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/nzt48.sh
