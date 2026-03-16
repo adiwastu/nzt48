@@ -4,101 +4,98 @@
 source /etc/nzt48/.env
 
 # --- CONFIG ---
-SYMBOLS=("USDJPY" "XAUUSD" "GBPJPY" "BTCUSD")
+SYMBOLS=("USDJPY" "XAUUSD" "EURUSD" "GBPJPY" "BTCUSD")
 TIMEFRAME="H1" 
+
+# Get current UTC hour to determine which broker's H4 just closed.
+# (10# forces bash to read as base-10 so "09" doesn't throw an octal error)
+HOUR_UTC=$(date -u +"%H")
 CURRENT_TIME=$(date +"%Y-%m-%d %H:%M:%S %Z")
 
-# The only two H4 grids that actually matter in global Forex.
-# Assuming your API natively provides one of these at Offset 0, the other is exactly 2 hours shifted.
-declare -A BROKERS=(
-    ["NY_CLOSE"]=0
-    ["UTC_MIDNIGHT"]=2
-)
+# Calculate the 4-hour cycle modulo based on the UTC hour
+MOD=$(( 10#$HOUR_UTC % 4 ))
 
-echo "[${CURRENT_TIME}] Firing up NZT-48..."
-echo "-> Scanning ${#SYMBOLS[@]} pairs across the two primary global H4 grids."
+# Name your brokers here based on the closing shift
+if [ "$MOD" -eq 1 ]; then
+    # 09:00 UTC / 4:00 PM WIB closes
+    BROKER_NAME="OANDA" 
+elif [ "$MOD" -eq 2 ]; then
+    # 10:00 UTC / 5:00 PM WIB closes (New York Close Standard)
+    BROKER_NAME="PEPPERSTONE" 
+else
+    # Not a 4H close for our target brokers. Die silently. Zero CPU wasted.
+    exit 0
+fi
+
+echo "[${CURRENT_TIME}] 4H Candle Closed for ${BROKER_NAME}. Scanning ${#SYMBOLS[@]} pairs..."
 
 for SYMBOL in "${SYMBOLS[@]}"; do
-    # Fetch 12 H1 bars once per symbol to save API calls
-    API_URL="https://api.hotland3x3.my.id/fetch_data_pos?symbol=${SYMBOL}&timeframe=${TIMEFRAME}&num_bars=12"
+    # Fetch 10 bars (we only need 8 for two H4 candles, plus a buffer)
+    API_URL="https://api.hotland3x3.my.id/fetch_data_pos?symbol=${SYMBOL}&timeframe=${TIMEFRAME}&num_bars=10"
     RESPONSE=$(curl -s "$API_URL")
 
     if [ -z "$RESPONSE" ] || [ "$RESPONSE" == "null" ]; then
-        echo "⚠️ Failed to fetch H1 data for $SYMBOL"
+        echo "⚠️ Failed to fetch data for $SYMBOL"
         continue
     fi
 
-    # Loop through the two configured broker layouts
-    for BROKER_NAME in "${!BROKERS[@]}"; do
-        OFFSET=${BROKERS[$BROKER_NAME]}
+    # Because we only run exactly when the 4H candle closes, we always 
+    # just grab the immediate last 8 closed H1 bars (-9 to -1)
+    RESULT=$(echo "$RESPONSE" | jq -r '
+      if type == "array" and length >= 9 then
+        
+        (.[ -9 : -5 ]) as $c1_h1 |
+        (.[ -5 : -1 ]) as $c2_h1 |
+        
+        {
+          open:  $c1_h1[0].open,
+          close: $c1_h1[-1].close,
+          high:  ($c1_h1 | map(.high) | max),
+          low:   ($c1_h1 | map(.low) | min)
+        } as $c1 |
 
-        RESULT=$(echo "$RESPONSE" | jq -r --argjson off "$OFFSET" '
-          if type == "array" and length >= 10 then
+        {
+          open:  $c2_h1[0].open,
+          close: $c2_h1[-1].close,
+          high:  ($c2_h1 | map(.high) | max),
+          low:   ($c2_h1 | map(.low) | min)
+        } as $c2 |
+        
+        if ($c1.close < $c1.open) and ($c2.close > $c2.open) and ($c2.open <= $c1.close) and ($c2.close > $c1.high) then
+          "BULLISH \($c2.close)"
+        elif ($c1.close > $c1.open) and ($c2.close < $c2.open) and ($c2.open >= $c1.close) and ($c2.close < $c1.low) then
+          "BEARISH \($c2.close)"
+        else
+          "NONE 0"
+        end
+
+      else
+        "ERROR 0"
+      end
+    ')
+
+    read PATTERN PRICE <<< "$RESULT"
+
+if [ "$PATTERN" == "BULLISH" ]; then
+        MESSAGE="🟢 ${SYMBOL}: ada bullish engulfing H4 di ${BROKER_NAME}. (price: ${PRICE})"
+
+        curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+            -d chat_id="${TELEGRAM_CHAT_ID}" \
+            -d text="${MESSAGE}" > /dev/null
             
-            # Construct Candle 1 (Previous 4H) and Candle 2 (Just Closed 4H)
-            (.[ (-9 - $off) : (-5 - $off) ]) as $c1_h1 |
-            (.[ (-5 - $off) : (-1 - $off) ]) as $c2_h1 |
+        echo " -> 🟢 Alert sent: $MESSAGE"
+
+    elif [ "$PATTERN" == "BEARISH" ]; then
+        MESSAGE="🔴 ${SYMBOL}: ada bearish engulfing H4 di ${BROKER_NAME}. (price: ${PRICE})"
+
+        curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+            -d chat_id="${TELEGRAM_CHAT_ID}" \
+            -d text="${MESSAGE}" > /dev/null
             
-            {
-              open:  $c1_h1[0].open,
-              close: $c1_h1[-1].close,
-              high:  ($c1_h1 | map(.high) | max),
-              low:   ($c1_h1 | map(.low) | min)
-            } as $c1 |
-
-            {
-              open:  $c2_h1[0].open,
-              close: $c2_h1[-1].close,
-              high:  ($c2_h1 | map(.high) | max),
-              low:   ($c2_h1 | map(.low) | min)
-            } as $c2 |
-            
-            # Strict Engulfing Rules
-            if ($c1.close < $c1.open) and ($c2.close > $c2.open) and ($c2.open <= $c1.close) and ($c2.close > $c1.high) then
-              "BULLISH \($c2.close)"
-            elif ($c1.close > $c1.open) and ($c2.close < $c2.open) and ($c2.open >= $c1.close) and ($c2.close < $c1.low) then
-              "BEARISH \($c2.close)"
-            else
-              "NONE 0"
-            end
-
-          else
-            "ERROR 0"
-          end
-        ')
-
-        read PATTERN PRICE <<< "$RESULT"
-
-        if [ "$PATTERN" == "BULLISH" ]; then
-            MESSAGE="🟢 <b>${SYMBOL} H4 engulfing found on ${BROKER_NAME} grid!</b>
-<b>Time:</b> ${CURRENT_TIME}
-<b>Pattern:</b> Strict Bullish
-<b>Price:</b> ${PRICE}"
-
-            curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
-                -d chat_id="${TELEGRAM_CHAT_ID}" \
-                -d text="${MESSAGE}" \
-                -d parse_mode="HTML" > /dev/null
-                
-            echo " -> 🟢 BULLISH alert sent for ${SYMBOL} on ${BROKER_NAME}."
-
-        elif [ "$PATTERN" == "BEARISH" ]; then
-            MESSAGE="🔴 <b>${SYMBOL} H4 engulfing found on ${BROKER_NAME} grid!</b>
-<b>Time:</b> ${CURRENT_TIME}
-<b>Pattern:</b> Strict Bearish
-<b>Price:</b> ${PRICE}"
-
-            curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
-                -d chat_id="${TELEGRAM_CHAT_ID}" \
-                -d text="${MESSAGE}" \
-                -d parse_mode="HTML" > /dev/null
-                
-            echo " -> 🔴 BEARISH alert sent for ${SYMBOL} on ${BROKER_NAME}."
-        fi
-    done
+        echo " -> 🔴 Alert sent: $MESSAGE"
+    fi
     
-    # 1 second breather between symbols so your Flask API doesn't choke
     sleep 1
 done
 
-echo "[$(date +"%Y-%m-%d %H:%M:%S %Z")] NZT-48 cycle complete."
+echo "[$(date +"%Y-%m-%d %H:%M:%S %Z")] Cycle complete."
