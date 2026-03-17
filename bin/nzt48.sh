@@ -5,116 +5,191 @@ source /etc/nzt48/.env
 
 # --- CONFIG ---
 SYMBOLS=("USDJPY" "XAUUSD")
-TIMEFRAME="H1" 
 
 # Get current UTC hour to determine which broker's H4 just closed.
-# (10# forces bash to read as base-10 so "09" doesn't throw an octal error)
 HOUR_UTC=$(date -u +"%H")
 CURRENT_TIME=$(date +"%Y-%m-%d %H:%M:%S %Z")
-
-# Calculate the 4-hour cycle modulo based on the UTC hour
 MOD=$(( 10#$HOUR_UTC % 4 ))
 
-# Name your brokers here based on the closing shift
 if [ "$MOD" -eq 1 ]; then
-    # 09:00 UTC / 4:00 PM WIB closes
     BROKER_NAME="OANDA/5ERS" 
 elif [ "$MOD" -eq 2 ]; then
-    # 10:00 UTC / 5:00 PM WIB closes (New York Close Standard)
     BROKER_NAME="TVC" 
 else
-    # Not a 4H close for our target brokers. Die silently. Zero CPU wasted.
     exit 0
 fi
 
-echo "[${CURRENT_TIME}] 4H Candle Closed for ${BROKER_NAME}. Scanning ${#SYMBOLS[@]} pairs..."
+echo "[${CURRENT_TIME}] 4H Candle Closed for ${BROKER_NAME}. Initiating Fractal Scan..."
 
+# --- TELEGRAM BROADCAST FUNCTION ---
+send_alert() {
+    local MSG="$1"
+    while read -r ID; do
+        [ -z "$ID" ] && continue
+        curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+            -d chat_id="${ID}" \
+            -d text="${MSG}" > /dev/null
+    done < /etc/nzt48/subscribers.txt
+    echo " -> $MSG"
+}
+
+# --- JQ COMPOSITE FVG ENGINES ---
+# These engines dynamically merge contiguous gaps and filter by overlap
+
+JQ_BULLISH_FVG='
+  if type == "array" and length >= $min_len then
+    (.[ -($min_len) : -1 ]) | 
+    reduce range(0; length - 2) as $i (
+      {groups: [], curr: null};
+      if (.[$i].high < .[$i+2].low) then
+        if .curr == null then .curr = {bot: .[$i].high, top: .[$i+2].low, end: $i}
+        elif $i == .curr.end + 1 then .curr.end = $i | .curr.top = .[$i+2].low
+        else .groups += [.curr] | .curr = {bot: .[$i].high, top: .[$i+2].low, end: $i}
+        end
+      else
+        if .curr != null then .groups += [.curr] | .curr = null else . end
+      end
+    ) |
+    (if .curr != null then .groups += [.curr] else . end) |
+    .groups | 
+    map(select(.top >= ($aoi_bot|tonumber) and .bot <= ($aoi_top|tonumber))) |
+    if length > 0 then
+      "VALID \((map(.bot) | min)) \((map(.top) | max))"
+    else
+      "NONE"
+    end
+  else
+    "NONE"
+  end
+'
+
+JQ_BEARISH_FVG='
+  if type == "array" and length >= $min_len then
+    (.[ -($min_len) : -1 ]) | 
+    reduce range(0; length - 2) as $i (
+      {groups: [], curr: null};
+      if (.[$i].low > .[$i+2].high) then
+        if .curr == null then .curr = {bot: .[$i+2].high, top: .[$i].low, end: $i}
+        elif $i == .curr.end + 1 then .curr.end = $i | .curr.bot = .[$i+2].high
+        else .groups += [.curr] | .curr = {bot: .[$i+2].high, top: .[$i].low, end: $i}
+        end
+      else
+        if .curr != null then .groups += [.curr] | .curr = null else . end
+      end
+    ) |
+    (if .curr != null then .groups += [.curr] else . end) |
+    .groups | 
+    map(select(.top >= ($aoi_bot|tonumber) and .bot <= ($aoi_top|tonumber))) |
+    if length > 0 then
+      "VALID \((map(.bot) | min)) \((map(.top) | max))"
+    else
+      "NONE"
+    end
+  else
+    "NONE"
+  end
+'
+
+# --- MAIN LOOP ---
 for SYMBOL in "${SYMBOLS[@]}"; do
-    # Fetch 10 bars (we only need 8 for two H4 candles, plus a buffer)
-    API_URL="https://api.hotland3x3.my.id/fetch_data_pos?symbol=${SYMBOL}&timeframe=${TIMEFRAME}&num_bars=10"
-    RESPONSE=$(curl -s "$API_URL")
+    
+    # --- PHASE 1: MACRO H4 SCAN ---
+    API_URL="https://api.hotland3x3.my.id/fetch_data_pos?symbol=${SYMBOL}&timeframe=H1&num_bars=10"
+    H1_RESP=$(curl -s "$API_URL")
 
-    if [ -z "$RESPONSE" ] || [ "$RESPONSE" == "null" ]; then
-        echo "⚠️ Failed to fetch data for $SYMBOL"
+    if [ -z "$H1_RESP" ] || [ "$H1_RESP" == "null" ]; then
         continue
     fi
 
-    # Because we only run exactly when the 4H candle closes, we always 
-    # just grab the immediate last 8 closed H1 bars (-9 to -1)
-    RESULT=$(echo "$RESPONSE" | jq -r '
+    # Extract H4 Engulfing + The High and Low of Candle 2
+    H4_RESULT=$(echo "$H1_RESP" | jq -r '
       if type == "array" and length >= 9 then
-        
         (.[ -9 : -5 ]) as $c1_h1 |
         (.[ -5 : -1 ]) as $c2_h1 |
         
-        {
-          open:  $c1_h1[0].open,
-          close: $c1_h1[-1].close,
-          high:  ($c1_h1 | map(.high) | max),
-          low:   ($c1_h1 | map(.low) | min)
-        } as $c1 |
-
-        {
-          open:  $c2_h1[0].open,
-          close: $c2_h1[-1].close,
-          high:  ($c2_h1 | map(.high) | max),
-          low:   ($c2_h1 | map(.low) | min)
-        } as $c2 |
+        { open: $c1_h1[0].open, close: $c1_h1[-1].close, high: ($c1_h1 | map(.high) | max), low: ($c1_h1 | map(.low) | min) } as $c1 |
+        { open: $c2_h1[0].open, close: $c2_h1[-1].close, high: ($c2_h1 | map(.high) | max), low: ($c2_h1 | map(.low) | min) } as $c2 |
         
         if ($c1.close < $c1.open) and ($c2.close > $c2.open) and ($c2.open <= $c1.close) and ($c2.close > $c1.high) then
-          "BULLISH \($c2.close)"
+          "BULLISH \($c2.low) \($c2.high)"
         elif ($c1.close > $c1.open) and ($c2.close < $c2.open) and ($c2.open >= $c1.close) and ($c2.close < $c1.low) then
-          "BEARISH \($c2.close)"
+          "BEARISH \($c2.low) \($c2.high)"
         else
-          "NONE 0"
+          "NONE 0 0"
         end
-
       else
-        "ERROR 0"
+        "NONE 0 0"
       end
     ')
 
-    read PATTERN PRICE <<< "$RESULT"
+    read PATTERN C2_LOW C2_HIGH <<< "$H4_RESULT"
 
+    # ==========================================
+    # BULLISH GAUNTLET
+    # ==========================================
     if [ "$PATTERN" == "BULLISH" ]; then
-        MESSAGE="🟢 ${SYMBOL}: ada bullish engulfing H4 di ${BROKER_NAME}. (price: ${PRICE})"
+        # Define Area of Interest (Diskon = Low to Midpoint)
+        MIDPOINT=$(awk "BEGIN {print ($C2_HIGH + $C2_LOW) / 2}")
+        
+        # --- PHASE 2: M15 SCAN ---
+        M15_RESP=$(curl -s "https://api.hotland3x3.my.id/fetch_data_pos?symbol=${SYMBOL}&timeframe=M15&num_bars=17")
+        M15_RES=$(echo "$M15_RESP" | jq -r --argjson min_len 17 --arg aoi_bot "$C2_LOW" --arg aoi_top "$MIDPOINT" "$JQ_BULLISH_FVG")
+        read M15_STATUS M15_BOT M15_TOP <<< "$M15_RES"
 
-        # Broadcast loop
-        while read -r ID; do
-            [ -z "$ID" ] && continue
-            curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
-                -d chat_id="${ID}" \
-                -d text="${MESSAGE}" > /dev/null
-        done < /etc/nzt48/subscribers.txt
-            
-        echo " -> 🟢 Broadcast sent: $MESSAGE"
+        if [ "$M15_STATUS" != "VALID" ]; then
+            send_alert "🟡 ${SYMBOL}: ada engulfing h4 bullish. tapi di area diskon ga ada 15m imbalance. thank you next"
+            continue
+        fi
 
+        # --- PHASE 3: M5 SCAN ---
+        # 4 hours = 48 M5 candles (+1 for buffer = 49). We use M15_BOT and M15_TOP as the new AOI.
+        M5_RESP=$(curl -s "https://api.hotland3x3.my.id/fetch_data_pos?symbol=${SYMBOL}&timeframe=M5&num_bars=49")
+        M5_RES=$(echo "$M5_RESP" | jq -r --argjson min_len 49 --arg aoi_bot "$M15_BOT" --arg aoi_top "$M15_TOP" "$JQ_BULLISH_FVG")
+        read M5_STATUS M5_BOT M5_TOP <<< "$M5_RES"
+
+        if [ "$M5_STATUS" != "VALID" ]; then
+            send_alert "🟠 ${SYMBOL}: ada engulfing h4 bullish, di area diskon, ada 15m imbalance. tapi ga ada 5m imbalance... thank you next"
+            continue
+        fi
+
+        # --- GOLDEN SETUP ---
+        send_alert "🟢 ${SYMBOL}: ada engulfing h4 bullish, di area diskon, ada 15m imbalance. ada 5m imbalance yang overlap. BUY!!"
+
+    # ==========================================
+    # BEARISH GAUNTLET
+    # ==========================================
     elif [ "$PATTERN" == "BEARISH" ]; then
-        MESSAGE="🔴 ${SYMBOL}: ada bearish engulfing H4 di ${BROKER_NAME}. (price: ${PRICE})"
+        # Define Area of Interest (Premium = Midpoint to High)
+        MIDPOINT=$(awk "BEGIN {print ($C2_HIGH + $C2_LOW) / 2}")
+        
+        # --- PHASE 2: M15 SCAN ---
+        M15_RESP=$(curl -s "https://api.hotland3x3.my.id/fetch_data_pos?symbol=${SYMBOL}&timeframe=M15&num_bars=17")
+        M15_RES=$(echo "$M15_RESP" | jq -r --argjson min_len 17 --arg aoi_bot "$MIDPOINT" --arg aoi_top "$C2_HIGH" "$JQ_BEARISH_FVG")
+        read M15_STATUS M15_BOT M15_TOP <<< "$M15_RES"
 
-        # Broadcast loop
-        while read -r ID; do
-            [ -z "$ID" ] && continue
-            curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
-                -d chat_id="${ID}" \
-                -d text="${MESSAGE}" > /dev/null
-        done < /etc/nzt48/subscribers.txt
-            
-        echo " -> 🔴 Broadcast sent: $MESSAGE"
+        if [ "$M15_STATUS" != "VALID" ]; then
+            send_alert "🟡 ${SYMBOL}: ada engulfing h4 bearish. tapi di area premium ga ada 15m imbalance. thank you next"
+            continue
+        fi
 
+        # --- PHASE 3: M5 SCAN ---
+        M5_RESP=$(curl -s "https://api.hotland3x3.my.id/fetch_data_pos?symbol=${SYMBOL}&timeframe=M5&num_bars=49")
+        M5_RES=$(echo "$M5_RESP" | jq -r --argjson min_len 49 --arg aoi_bot "$M15_BOT" --arg aoi_top "$M15_TOP" "$JQ_BEARISH_FVG")
+        read M5_STATUS M5_BOT M5_TOP <<< "$M5_RES"
+
+        if [ "$M5_STATUS" != "VALID" ]; then
+            send_alert "🟠 ${SYMBOL}: ada engulfing h4 bearish, di area premium, ada 15m imbalance. tapi ga ada 5m imbalance... thank you next"
+            continue
+        fi
+
+        # --- GOLDEN SETUP ---
+        send_alert "🔴 ${SYMBOL}: ada engulfing h4 bearish, di area premium, ada 15m imbalance. ada 5m imabalance yang overlap. SELL!!"
+
+    # ==========================================
+    # NO ENGULFING (HEARTBEAT)
+    # ==========================================
     else
-        # Catch-all for "NONE" or "ERROR"
-        MESSAGE="⚪ ${SYMBOL}: ga ada engulfing H4 di ${BROKER_NAME}."
-
-        # Broadcast loop
-        while read -r ID; do
-            [ -z "$ID" ] && continue
-            curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
-                -d chat_id="${ID}" \
-                -d text="${MESSAGE}" > /dev/null
-        done < /etc/nzt48/subscribers.txt
-            
-        echo " -> ⚪ Broadcast checked: ga ada engulfing."
+        send_alert "⚪ ${SYMBOL}: ga ada engulfing H4 di ${BROKER_NAME}."
     fi
     
     sleep 1
