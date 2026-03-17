@@ -4,7 +4,7 @@
 source /etc/nzt48/.env
 
 # --- CONFIG ---
-SYMBOLS=("USDJPY" "XAUUSD" "EURUSD" "GBPJPY" "BTCUSD")
+SYMBOLS=("USDJPY" "XAUUSD")
 TIMEFRAME="H1" 
 
 # Get current UTC hour to determine which broker's H4 just closed.
@@ -18,10 +18,10 @@ MOD=$(( 10#$HOUR_UTC % 4 ))
 # Name your brokers here based on the closing shift
 if [ "$MOD" -eq 1 ]; then
     # 09:00 UTC / 4:00 PM WIB closes
-    BROKER_NAME="OANDA" 
+    BROKER_NAME="OANDA/5ERS" 
 elif [ "$MOD" -eq 2 ]; then
     # 10:00 UTC / 5:00 PM WIB closes (New York Close Standard)
-    BROKER_NAME="PEPPERSTONE" 
+    BROKER_NAME="TVC" 
 else
     # Not a 4H close for our target brokers. Die silently. Zero CPU wasted.
     exit 0
@@ -76,7 +76,7 @@ for SYMBOL in "${SYMBOLS[@]}"; do
 
     read PATTERN PRICE <<< "$RESULT"
 
-if [ "$PATTERN" == "BULLISH" ]; then
+    if [ "$PATTERN" == "BULLISH" ]; then
         MESSAGE="🟢 ${SYMBOL}: ada bullish engulfing H4 di ${BROKER_NAME}. (price: ${PRICE})"
 
         curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
@@ -93,6 +93,16 @@ if [ "$PATTERN" == "BULLISH" ]; then
             -d text="${MESSAGE}" > /dev/null
             
         echo " -> 🔴 Alert sent: $MESSAGE"
+
+    else
+        # Catch-all for "NONE" or "ERROR"
+        MESSAGE="⚪ ${SYMBOL}: ga ada engulfing H4 di ${BROKER_NAME}."
+
+        curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+            -d chat_id="${TELEGRAM_CHAT_ID}" \
+            -d text="${MESSAGE}" > /dev/null
+            
+        echo " -> ⚪ Checked: ga ada engulfing."
     fi
     
     sleep 1
