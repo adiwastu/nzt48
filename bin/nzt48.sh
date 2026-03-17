@@ -79,30 +79,42 @@ for SYMBOL in "${SYMBOLS[@]}"; do
     if [ "$PATTERN" == "BULLISH" ]; then
         MESSAGE="🟢 ${SYMBOL}: ada bullish engulfing H4 di ${BROKER_NAME}. (price: ${PRICE})"
 
-        curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
-            -d chat_id="${TELEGRAM_CHAT_ID}" \
-            -d text="${MESSAGE}" > /dev/null
+        # Broadcast loop
+        while read -r ID; do
+            [ -z "$ID" ] && continue
+            curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+                -d chat_id="${ID}" \
+                -d text="${MESSAGE}" > /dev/null
+        done < /etc/nzt48/subscribers.txt
             
-        echo " -> 🟢 Alert sent: $MESSAGE"
+        echo " -> 🟢 Broadcast sent: $MESSAGE"
 
     elif [ "$PATTERN" == "BEARISH" ]; then
         MESSAGE="🔴 ${SYMBOL}: ada bearish engulfing H4 di ${BROKER_NAME}. (price: ${PRICE})"
 
-        curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
-            -d chat_id="${TELEGRAM_CHAT_ID}" \
-            -d text="${MESSAGE}" > /dev/null
+        # Broadcast loop
+        while read -r ID; do
+            [ -z "$ID" ] && continue
+            curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+                -d chat_id="${ID}" \
+                -d text="${MESSAGE}" > /dev/null
+        done < /etc/nzt48/subscribers.txt
             
-        echo " -> 🔴 Alert sent: $MESSAGE"
+        echo " -> 🔴 Broadcast sent: $MESSAGE"
 
     else
         # Catch-all for "NONE" or "ERROR"
         MESSAGE="⚪ ${SYMBOL}: ga ada engulfing H4 di ${BROKER_NAME}."
 
-        curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
-            -d chat_id="${TELEGRAM_CHAT_ID}" \
-            -d text="${MESSAGE}" > /dev/null
+        # Broadcast loop
+        while read -r ID; do
+            [ -z "$ID" ] && continue
+            curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+                -d chat_id="${ID}" \
+                -d text="${MESSAGE}" > /dev/null
+        done < /etc/nzt48/subscribers.txt
             
-        echo " -> ⚪ Checked: ga ada engulfing."
+        echo " -> ⚪ Broadcast checked: ga ada engulfing."
     fi
     
     sleep 1
