@@ -41,11 +41,11 @@ get_next_scan() {
     local formatted=$(date -d "$datetime" +"%Y-%m-%d %H:%M:%S %Z")
 
     if [ $diff -lt 0 ]; then
-        echo "📅 Next scheduled scan: ${formatted} (already passed, should fire soon?)"
+        echo "Server OK. Next scheduled scan: ${formatted} (already passed, should fire soon?)"
     elif [ $minutes -lt 1 ]; then
-        echo "📅 Next scheduled scan: ${formatted} (in less than a minute)"
+        echo "Server OK. Next scheduled scan: ${formatted} (in less than a minute)"
     else
-        echo "📅 Next scheduled scan: ${formatted} (in ${minutes} minutes)"
+        echo "Server OK. Next scheduled scan: ${formatted} (in ${minutes} minutes)"
     fi
 }
 
@@ -77,10 +77,10 @@ while true; do
                         echo "$CHAT_ID" >> "$SUBS_FILE"
                         curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
                             -d chat_id="$CHAT_ID" \
-                            -d text="✅ You are now taking NZT-48." > /dev/null
+                            -d text="You are now taking NZT-48." > /dev/null
                         echo "New subscriber added: $CHAT_ID"
                     fi
-                elif [ "$TEXT" = "/checknextscan" ]; then
+                elif [ "$TEXT" = "/check" ]; then
                     NEXT_SCAN=$(get_next_scan)
                     curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
                         -d chat_id="$CHAT_ID" \
