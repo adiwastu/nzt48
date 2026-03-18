@@ -9,26 +9,43 @@ touch $OFFSET_FILE
 
 echo "Starting NZT-48 Telegram Listener..."
 
-# Function to get the next scheduled run of nzt48.timer
+# Function to get the next scheduled run of nzt48.timer with minutes left
 get_next_scan() {
-    # Get the line for our timer (no legend, no pager)
     local timer_line=$(systemctl list-timers nzt48.timer --no-legend 2>/dev/null | head -n1)
-    
     if [ -z "$timer_line" ]; then
         echo "Timer not found or inactive."
         return
     fi
-    
-    # Extract the first four fields: day, date, time, timezone
+
     local next_day=$(echo "$timer_line" | awk '{print $1}')
     local next_date=$(echo "$timer_line" | awk '{print $2}')
     local next_time=$(echo "$timer_line" | awk '{print $3}')
     local next_tz=$(echo "$timer_line" | awk '{print $4}')
-    
-    if [ -n "$next_day" ] && [ -n "$next_date" ] && [ -n "$next_time" ]; then
-        echo "$next_day $next_date $next_time $next_tz"
-    else
+
+    if [ -z "$next_day" ] || [ -z "$next_date" ] || [ -z "$next_time" ]; then
         echo "Could not parse next scan time."
+        return
+    fi
+
+    # Build a date string that `date` can understand
+    local datetime="${next_day} ${next_date} ${next_time} ${next_tz}"
+    local next_epoch=$(date -d "$datetime" +%s 2>/dev/null)
+    if [ -z "$next_epoch" ]; then
+        echo "Could not convert time."
+        return
+    fi
+
+    local now_epoch=$(date +%s)
+    local diff=$((next_epoch - now_epoch))
+    local minutes=$((diff / 60))
+    local formatted=$(date -d "$datetime" +"%Y-%m-%d %H:%M:%S %Z")
+
+    if [ $diff -lt 0 ]; then
+        echo "📅 Next scheduled scan: ${formatted} (already passed, should fire soon?)"
+    elif [ $minutes -lt 1 ]; then
+        echo "📅 Next scheduled scan: ${formatted} (in less than a minute)"
+    else
+        echo "📅 Next scheduled scan: ${formatted} (in ${minutes} minutes)"
     fi
 }
 
@@ -67,7 +84,7 @@ while true; do
                     NEXT_SCAN=$(get_next_scan)
                     curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
                         -d chat_id="$CHAT_ID" \
-                        -d text="📅 Next scheduled scan: $NEXT_SCAN" > /dev/null
+                        -d text="$NEXT_SCAN" > /dev/null
                     echo "Replied to $CHAT_ID with next scan time."
                 fi
             fi
