@@ -103,17 +103,38 @@ for SYMBOL in "${SYMBOLS[@]}"; do
 
     # Extract H4 Engulfing + The High and Low of Candle 2
     H4_RESULT=$(echo "$H1_RESP" | jq -r '
-      if type == "array" and length >= 9 then
-        (.[ -9 : -5 ]) as $c1_h1 |
-        (.[ -5 : -1 ]) as $c2_h1 |
+      if type == "array" and length >= 8 then
         
-        { open: $c1_h1[0].open, close: $c1_h1[-1].close, high: ($c1_h1 | map(.high) | max), low: ($c1_h1 | map(.low) | min) } as $c1 |
-        { open: $c2_h1[0].open, close: $c2_h1[-1].close, high: ($c2_h1 | map(.high) | max), low: ($c2_h1 | map(.low) | min) } as $c2 |
+        # 1. Calculate the native MT5 4-Hour block epoch for each candle
+        map(. + {
+          h4_epoch: (
+            (.time | sub(" GMT$"; "") | strptime("%a, %d %b %Y %H:%M:%S") | mktime) - 
+            (((.time[17:19] | tonumber) % 4) * 3600)
+          )
+        }) |
         
-        if ($c1.close < $c1.open) and ($c2.close > $c2.open) and ($c2.open <= $c1.close) and ($c2.close > $c1.high) then
-          "BULLISH \($c2.low) \($c2.high)"
-        elif ($c1.close > $c1.open) and ($c2.close < $c2.open) and ($c2.open >= $c1.close) and ($c2.close < $c1.low) then
-          "BEARISH \($c2.low) \($c2.high)"
+        # 2. Group them together chronologically
+        group_by(.h4_epoch) | sort_by(.[0].h4_epoch) |
+        
+        # 3. If the last group has less than 3 candles, it is a brand new forming hour. Drop it.
+        if (.[-1] | length) < 3 then .[:-1] else . end |
+        
+        # 4. Grab the last two fully formed H4 blocks
+        if length >= 2 then
+          .[-2] as $c1_h1 |
+          .[-1] as $c2_h1 |
+          
+          { open: $c1_h1[0].open, close: $c1_h1[-1].close, high: ($c1_h1 | map(.high) | max), low: ($c1_h1 | map(.low) | min) } as $c1 |
+          { open: $c2_h1[0].open, close: $c2_h1[-1].close, high: ($c2_h1 | map(.high) | max), low: ($c2_h1 | map(.low) | min) } as $c2 |
+          
+          # Notice we also loosened the Open gap rule ($c2.open < $c1.open) to prevent spread traps
+          if ($c1.close < $c1.open) and ($c2.close > $c2.open) and ($c2.open < $c1.open) and ($c2.close > $c1.high) then
+            "BULLISH \($c2.low) \($c2.high)"
+          elif ($c1.close > $c1.open) and ($c2.close < $c2.open) and ($c2.open > $c1.open) and ($c2.close < $c1.low) then
+            "BEARISH \($c2.low) \($c2.high)"
+          else
+            "NONE 0 0"
+          end
         else
           "NONE 0 0"
         end
