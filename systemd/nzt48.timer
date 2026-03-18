@@ -1,8 +1,9 @@
 [Unit]
-Description=Run NZT-48 Scanner every hour
+Description=Run NZT-48 V0.2 on H4 Closes (WIB Schedule)
 
 [Timer]
-OnCalendar=*-*-* *:01:00
+# Every 4 hours at minute :01
+OnCalendar=*-*-* 03,07,11,15,19,23:01:00
 Persistent=true
 
 [Install]
