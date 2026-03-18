@@ -11,14 +11,25 @@ echo "Starting NZT-48 Telegram Listener..."
 
 # Function to get the next scheduled run of nzt48.timer
 get_next_scan() {
-    local next_us=$(systemctl show nzt48.timer --property=NextElapseRealtime --value 2>/dev/null)
-    if [ -z "$next_us" ] || [ "$next_us" = "0" ]; then
-        echo "Timer not found or not scheduled."
+    # Get the line for our timer (no legend, no pager)
+    local timer_line=$(systemctl list-timers nzt48.timer --no-legend 2>/dev/null | head -n1)
+    
+    if [ -z "$timer_line" ]; then
+        echo "Timer not found or inactive."
         return
     fi
-    # Convert microseconds to seconds
-    local next_sec=$((next_us / 1000000))
-    date -d "@$next_sec" +"%Y-%m-%d %H:%M:%S %Z"
+    
+    # Extract the first four fields: day, date, time, timezone
+    local next_day=$(echo "$timer_line" | awk '{print $1}')
+    local next_date=$(echo "$timer_line" | awk '{print $2}')
+    local next_time=$(echo "$timer_line" | awk '{print $3}')
+    local next_tz=$(echo "$timer_line" | awk '{print $4}')
+    
+    if [ -n "$next_day" ] && [ -n "$next_date" ] && [ -n "$next_time" ]; then
+        echo "$next_day $next_date $next_time $next_tz"
+    else
+        echo "Could not parse next scan time."
+    fi
 }
 
 while true; do
