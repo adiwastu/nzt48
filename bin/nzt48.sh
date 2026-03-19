@@ -24,7 +24,7 @@ send_alert() {
 
 for SYMBOL in "${SYMBOLS[@]}"; do
     # Pulling 2 bars is enough now since we only care about the last two
-    API_URL="https://api.hotland3x3.my.id/fetch_data_pos?symbol=${SYMBOL}&timeframe=${TIMEFRAME}&num_bars=2"
+    API_URL="https://api.hotland3x3.my.id/fetch_data_pos?symbol=${SYMBOL}&timeframe=${TIMEFRAME}&num_bars=3"
     RESP=$(curl -s "$API_URL")
 
     if [ -z "$RESP" ] || [ "$RESP" == "null" ]; then
@@ -33,8 +33,8 @@ for SYMBOL in "${SYMBOLS[@]}"; do
 
     RESULT=$(echo "$RESP" | jq -r '
       if type == "array" and length >= 2 then
-        .[0] as $c1 |
-        .[1] as $c2 |
+        .[-3] as $c1 |
+        .[-2] as $c2 |
         
         # BULLISH: Red then Green + Close 2 > High 1
         if ($c1.close < $c1.open) and ($c2.close > $c2.open) and ($c2.close > $c1.high) then
