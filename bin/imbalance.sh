@@ -91,19 +91,10 @@ RESULT=$(echo "$M15_RESP" | jq -r --arg MACRO "$PATTERN" --arg FIB_STR "$FIB" '
 
 read STATUS IMB_LOW IMB_HIGH <<< "$RESULT"
 
-# --- PHASE 4: THE OUTPUT ---
+# --- PHASE 4: THE HANDOFF ---
 if [ "$STATUS" == "FOUND" ]; then
-    if [ "$PATTERN" == "BULLISH" ]; then ICON="🟢"; else ICON="🔴"; fi
-    
-    MESSAGE="${ICON} ${SYMBOL} ${PATTERN} ENGULFING
-0.5 Fib Level: ${FIB}
-
-🎯 DEEPEST 15M COMPOSITE IMBALANCE:
-Top: ${IMB_HIGH}
-Bottom: ${IMB_LOW}"
-
-    send_alert "$MESSAGE"
+    echo "🎯 15m Imbalance confirmed. Handing off to 5m Refinement..."
+    /usr/local/bin/imbalance_refined.sh "$SYMBOL" "$PATTERN" "$C2_TIME" "$IMB_LOW" "$IMB_HIGH" "$FIB" &
 else
-    # If it found the H4 engulfing, but no valid 15m imbalance hit your Fib zone
     echo "⚪ ${SYMBOL}: H4 Engulfing found, but NO 15m Imbalance reached the Fib zone. Ignored."
 fi

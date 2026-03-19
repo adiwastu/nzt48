@@ -11,13 +11,12 @@ echo "=> Pulling latest code..."
 git pull origin main
 
 echo "=> Installing bin..."
-# 'install -m 755' copies the file AND makes it executable instantly
 install -m 755 bin/nzt48.sh /usr/local/bin/nzt48.sh
 install -m 755 bin/listener.sh /usr/local/bin/listener.sh
 install -m 755 bin/imbalance.sh /usr/local/bin/imbalance.sh
+install -m 755 bin/imbalance_refined.sh /usr/local/bin/imbalance_refined.sh
 
 echo "=> Installing systemd..."
-# 'install -m 644' copies systemd files with standard permissions
 install -m 644 systemd/nzt48.service /etc/systemd/system/
 install -m 644 systemd/nzt48.timer /etc/systemd/system/
 install -m 644 systemd/listener.service /etc/systemd/system/
