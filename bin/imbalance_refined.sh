@@ -25,7 +25,7 @@ send_alert() {
 echo "[REFINED ENGINE] Scanning 5m micro structure for ${SYMBOL}..."
 
 # --- M5 EXTRACTION (49 bars to drop the baby candle) ---
-API_URL="https://api.hotland3x3.my.id/fetch_data_pos?symbol=${SYMBOL}&timeframe=M5&num_bars=73"
+API_URL="https://api.hotland3x3.my.id/fetch_data_pos?symbol=${SYMBOL}&timeframe=M5&num_bars=49"
 M5_RESP=$(curl -s "$API_URL")
 
 if [ -z "$M5_RESP" ] || [ "$M5_RESP" == "null" ]; then
