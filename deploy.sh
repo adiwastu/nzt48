@@ -11,20 +11,21 @@ echo "=> Pulling latest code..."
 git pull origin main
 
 echo "=> Installing bin..."
-cp bin/nzt48.sh /usr/local/bin/nzt48.sh
-chmod +x /usr/local/bin/nzt48.sh
-cp bin/listener.sh /usr/local/bin/listener.sh
-chmod +x /usr/local/bin/listener.sh
+# 'install -m 755' copies the file AND makes it executable instantly
+install -m 755 bin/nzt48.sh /usr/local/bin/nzt48.sh
+install -m 755 bin/listener.sh /usr/local/bin/listener.sh
+install -m 755 bin/imbalance.sh /usr/local/bin/imbalance.sh
 
 echo "=> Installing systemd..."
-cp systemd/nzt48.service /etc/systemd/system/
-cp systemd/nzt48.timer /etc/systemd/system/
-cp systemd/listener.service /etc/systemd/system/
+# 'install -m 644' copies systemd files with standard permissions
+install -m 644 systemd/nzt48.service /etc/systemd/system/
+install -m 644 systemd/nzt48.timer /etc/systemd/system/
+install -m 644 systemd/listener.service /etc/systemd/system/
 
 echo "=> Reloading daemon..."
 systemctl daemon-reload
 
-echo "=> Starting timer..."
+echo "=> Starting timer & listener..."
 systemctl enable nzt48.timer
 systemctl restart nzt48.timer
 systemctl enable listener.service
