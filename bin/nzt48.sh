@@ -5,7 +5,7 @@ source /etc/nzt48/.env
 
 # --- CONFIG ---
 SYMBOLS=("USDJPY" "XAUUSD")
-TIMEFRAME="H4" 
+TIMEFRAME="H4"
 
 # --- ARGUMENT PARSING ---
 DEBUG=false
@@ -30,7 +30,6 @@ fi
 send_alert() {
     local MSG="$1"
     if [ "$DEBUG" = true ]; then
-        # Just print it to the console, do not fire the curl
         echo " 📟 [TEST ALERT] -> $MSG"
         return
     fi
@@ -45,15 +44,24 @@ send_alert() {
 }
 
 for SYMBOL in "${SYMBOLS[@]}"; do
-    
+
     # --- API ROUTING ---
     if [ -n "$TARGET_TIME" ]; then
-        # If a target time is provided, calculate the start time (8 hours prior) to get exactly 2 H4 bars
-        START_TIME=$(date -u -d "${TARGET_TIME} - 8 hours" +"%Y-%m-%dT%H:%M:%S")
-        FORMATTED_TARGET=$(date -u -d "${TARGET_TIME}" +"%Y-%m-%dT%H:%M:%S")
-        
+        # Convert local target time to UTC epoch seconds
+        target_epoch=$(date -u -d "$TARGET_TIME" +%s 2>/dev/null)
+        if [ -z "$target_epoch" ]; then
+            echo "❌ Invalid target time format. Use 'YYYY-MM-DD HH:MM:SS'"
+            exit 1
+        fi
+
+        # Subtract 8 hours (28800 seconds) to get the start of the two‑candle window
+        start_epoch=$((target_epoch - 28800))
+
+        START_TIME=$(date -u -d "@$start_epoch" +"%Y-%m-%dT%H:%M:%S")
+        FORMATTED_TARGET=$(date -u -d "@$target_epoch" +"%Y-%m-%dT%H:%M:%S")
+
         API_URL="https://api.hotland3x3.my.id/fetch_data_range?symbol=${SYMBOL}&timeframe=${TIMEFRAME}&start=${START_TIME}&end=${FORMATTED_TARGET}"
-        
+
         if [ "$DEBUG" = true ]; then
             echo " ⏳ Fetching historical range: $START_TIME to $FORMATTED_TARGET"
         fi
@@ -74,15 +82,15 @@ for SYMBOL in "${SYMBOLS[@]}"; do
       if type == "array" and length >= 2 then
         .[-2] as $c1 |
         .[-1] as $c2 |
-        
+
         # BULLISH: Red then Green + Close 2 > High 1
         if ($c1.close < $c1.open) and ($c2.close > $c2.open) and ($c2.close > $c1.high) then
           "BULLISH \($c2.low) \($c2.high)"
-        
+
         # BEARISH: Green then Red + Close 2 < Low 1
         elif ($c1.close > $c1.open) and ($c2.close < $c2.open) and ($c2.close < $c1.low) then
           "BEARISH \($c2.low) \($c2.high)"
-        
+
         else
           "NONE 0 0"
         end
