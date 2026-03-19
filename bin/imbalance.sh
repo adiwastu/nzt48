@@ -22,41 +22,88 @@ send_alert() {
     echo " -> $MSG"
 }
 
-echo "[IMBALANCE SCRIPT] Tracking ${SYMBOL} ${PATTERN} inside ${C2_TIME}"
+echo "[IMBALANCE ENGINE] Scanning 15m internal structure for ${SYMBOL}..."
 
-# --- M15 EXTRACTION (The "Pull 17" Method) ---
+# --- M15 EXTRACTION ---
 API_URL="https://api.hotland3x3.my.id/fetch_data_pos?symbol=${SYMBOL}&timeframe=M15&num_bars=17"
 M15_RESP=$(curl -s "$API_URL")
 
 if [ -z "$M15_RESP" ] || [ "$M15_RESP" == "null" ]; then
-    send_alert "⚠️ ${SYMBOL}: H4 Engulfing found, but failed to pull M15 data."
+    echo "⚠️ ${SYMBOL}: Failed to pull M15 data."
     exit 1
 fi
 
-# We take the array, chop off the baby candle at the end, and verify we have 16 left
-M15_SUMMARY=$(echo "$M15_RESP" | jq -r '
+# --- THE IMBALANCE ENGINE (jq) ---
+RESULT=$(echo "$M15_RESP" | jq -r --arg MACRO "$PATTERN" --arg FIB_STR "$FIB" '
+  ($FIB_STR | tonumber) as $FIB |
+  
   if type == "array" and length >= 17 then
-    # Slice from index 0 up to (but not including) index 16. This gives us exactly 16 candles.
-    .[0:16] as $valid_candles |
-    ($valid_candles | length) as $len |
-    $valid_candles[0].time as $first_time |
-    $valid_candles[-1].time as $last_time |
-    "Count: \($len) | First: \($first_time) | Last: \($last_time)"
+    .[0:16] | # Isolate the exact 16 candles of the H4 block
+    
+    # Phase 1a: Find all directional gaps
+    [ range(0; length - 2) as $i |
+      if $MACRO == "BULLISH" and .[$i].high < .[$i+2].low then
+        { index: $i, low: .[$i].high, high: .[$i+2].low }
+      elif $MACRO == "BEARISH" and .[$i].low > .[$i+2].high then
+        { index: $i, low: .[$i+2].high, high: .[$i].low }
+      else empty end
+    ] |
+    
+    # Phase 1b: Merge consecutive gaps into composites
+    reduce .[] as $gap (
+      [];
+      if length == 0 then [$gap]
+      else
+        .[-1] as $last |
+        if $gap.index == $last.index + 1 then
+          .[0:-1] + [{
+            index: $gap.index,
+            low: (if $last.low < $gap.low then $last.low else $gap.low end),
+            high: (if $last.high > $gap.high then $last.high else $gap.high end)
+          }]
+        else
+          . + [$gap]
+        end
+      end
+    ) |
+    
+    # Phase 2: The Fib Filter
+    map(select(
+      ($MACRO == "BULLISH" and .low <= $FIB) or
+      ($MACRO == "BEARISH" and .high >= $FIB)
+    )) |
+    
+    # Phase 3: The Deepest Extractor
+    if length == 0 then
+      "NONE 0 0"
+    else
+      if $MACRO == "BULLISH" then
+        min_by(.low) | "FOUND \(.low) \(.high)"
+      else
+        max_by(.high) | "FOUND \(.low) \(.high)"
+      end
+    end
+    
   else
-    "Error: Array length is \(length)"
+    "NONE 0 0"
   end
 ')
 
-# --- TEMPORARY TELEGRAM ALERT ---
-if [ "$PATTERN" == "BULLISH" ]; then ICON="🟢"; else ICON="🔴"; fi
+read STATUS IMB_LOW IMB_HIGH <<< "$RESULT"
 
-MESSAGE="${ICON} ${SYMBOL} ${PATTERN} ENGULFING
-Area of Interest (0.5 Fib): ${FIB}
+# --- PHASE 4: THE OUTPUT ---
+if [ "$STATUS" == "FOUND" ]; then
+    if [ "$PATTERN" == "BULLISH" ]; then ICON="🟢"; else ICON="🔴"; fi
+    
+    MESSAGE="${ICON} ${SYMBOL} ${PATTERN} ENGULFING
+0.5 Fib Level: ${FIB}
 
-[FVG HUNTER DIAGNOSTICS]
-H4 Candle Open Time: ${C2_TIME}
-M15 Data Extracted: ${M15_SUMMARY}
+🎯 DEEPEST 15M COMPOSITE IMBALANCE:
+Top: ${IMB_HIGH}
+Bottom: ${IMB_LOW}"
 
-(FVG Logic Pending in next version)"
-
-send_alert "$MESSAGE"
+    send_alert "$MESSAGE"
+else
+    # If it found the H4 engulfing, but no valid 15m imbalance hit your Fib zone
+    echo "⚪ ${SYMBOL}: H4 Engulfing found, but NO 15m Imbalance reached the Fib zone. Ignored."
+fi
