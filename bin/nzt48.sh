@@ -49,7 +49,7 @@ for SYMBOL in "${SYMBOLS[@]}"; do
     # --- API ROUTING ---
     if [ -n "$TARGET_TIME" ]; then
         # If a target time is provided, calculate the start time (8 hours prior) to get exactly 2 H4 bars
-        START_TIME=$(date -d "${TARGET_TIME} - 8 hours" +"%Y-%m-%dT%H:%M:%S")
+        START_TIME=$(date -d "${TARGET_TIME} - 8 hours ago" +"%Y-%m-%dT%H:%M:%S")
         FORMATTED_TARGET=$(date -d "${TARGET_TIME}" +"%Y-%m-%dT%H:%M:%S")
         
         API_URL="https://api.hotland3x3.my.id/fetch_data_range?symbol=${SYMBOL}&timeframe=${TIMEFRAME}&start=${START_TIME}&end=${FORMATTED_TARGET}"
