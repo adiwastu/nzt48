@@ -25,7 +25,7 @@ send_alert() {
 echo "[IMBALANCE ENGINE] Scanning 15m internal structure for ${SYMBOL}..."
 
 # --- M15 EXTRACTION ---
-API_URL="https://api.hotland3x3.my.id/fetch_data_pos?symbol=${SYMBOL}&timeframe=M15&num_bars=17"
+API_URL="https://api.hotland3x3.my.id/fetch_data_pos?symbol=${SYMBOL}&timeframe=M15&num_bars=24"
 M15_RESP=$(curl -s "$API_URL")
 
 if [ -z "$M15_RESP" ] || [ "$M15_RESP" == "null" ]; then
