@@ -1,0 +1,10 @@
+[Unit]
+Description=Run Health Checker Every 15 Minutes
+
+[Timer]
+# Fires at :00, :15, :30, :45 of every hour
+OnCalendar=*:0/15
+Persistent=true
+
+[Install]
+WantedBy=timers.target

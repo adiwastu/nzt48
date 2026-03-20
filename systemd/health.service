@@ -1,0 +1,8 @@
+[Unit]
+Description=NZT-48 API Health Checker
+After=network.target
+
+[Service]
+Type=oneshot
+User=root
+ExecStart=/usr/local/bin/health_checker.sh

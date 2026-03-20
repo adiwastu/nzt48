@@ -94,11 +94,11 @@ read STATUS IMB5_LOW IMB5_HIGH <<< "$RESULT"
 if [ "$STATUS" == "FOUND" ]; then
     if [ "$PATTERN" == "BULLISH" ]; then ICON="🟢"; else ICON="🔴"; fi
     
-    MESSAGE="${ICON} ${SYMBOL} ${PATTERN} SNIPER SETUP
-0.5 Fib Level: ${FIB}
+    MESSAGE="${ICON} ${SYMBOL} ${PATTERN} Entry!! Ada engulfing h4
+0.5 fib: ${FIB}
 
-🎯 15M Imbalance Zone: ${IMB15_LOW} to ${IMB15_HIGH}
-🔬 REFINED 5M ENTRY: ${IMB5_LOW} to ${IMB5_HIGH}"
+m15 imbalance: ${IMB15_LOW} to ${IMB15_HIGH}
+m5 imbalance: ${IMB5_LOW} to ${IMB5_HIGH}"
 
     send_alert "$MESSAGE"
 else

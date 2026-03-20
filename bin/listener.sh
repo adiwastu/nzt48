@@ -86,6 +86,26 @@ while true; do
                         -d chat_id="$CHAT_ID" \
                         -d text="$NEXT_SCAN" > /dev/null
                     echo "Replied to $CHAT_ID with next scan time."
+                
+                # --- NEW HEALTH COMMAND ---
+                elif [ "$TEXT" = "/health" ]; then
+                    API_URL="https://api.hotland3x3.my.id/fetch_data_pos?symbol=USDJPY&timeframe=H4&num_bars=1"
+                    
+                    # Ping the API and grab the HTTP status code (timeout 10s)
+                    HTTP_STATUS=$(curl -o /dev/null -s -w "%{http_code}" --max-time 10 "$API_URL")
+                    
+                    if [ "$HTTP_STATUS" -eq 200 ]; then
+                        MSG="🟢 API is ONLINE (HTTP 200 OK)"
+                    elif [ "$HTTP_STATUS" -eq 000 ]; then
+                        MSG="🔴 API is DOWN (Timeout/Unreachable)"
+                    else
+                        MSG="⚠️ API is STRUGGLING (HTTP $HTTP_STATUS)"
+                    fi
+                    
+                    curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+                        -d chat_id="$CHAT_ID" \
+                        -d text="$MSG" > /dev/null
+                    echo "Replied to $CHAT_ID with API health status."
                 fi
             fi
         done
