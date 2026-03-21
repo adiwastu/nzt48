@@ -4,11 +4,26 @@
 source /etc/nzt48/.env
 
 # --- CONFIG ---
-SYMBOLS=("USDJPY" "XAUUSD")
+SYMBOLS=("XAUUSD")
 TIMEFRAME="H4" 
+
+# Set this to 'true' to chain scripts, or 'false' to just get a plain Telegram alert
+ENABLE_HANDOFF=false
 
 CURRENT_TIME=$(date +"%Y-%m-%d %H:%M:%S %Z")
 echo "[${CURRENT_TIME}] V0.2: Scanning H4 Displacement..."
+
+# --- TELEGRAM BROADCAST FUNCTION ---
+send_alert() {
+    local MSG="$1"
+    while read -r ID; do
+        [ -z "$ID" ] && continue
+        curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+            -d chat_id="${ID}" \
+            -d text="${MSG}" > /dev/null
+    done < /etc/nzt48/subscribers.txt
+    echo " -> $MSG"
+}
 
 for SYMBOL in "${SYMBOLS[@]}"; do
     # Pull 3 bars to safely ignore the H4 baby candle
@@ -43,10 +58,17 @@ for SYMBOL in "${SYMBOLS[@]}"; do
         C2_TIME="${T_DAY} ${T_DATE} ${T_MON} ${T_YR} ${T_HR} ${T_TZ}"
         FIB=$(awk "BEGIN {print ($HIGH + $LOW) / 2}")
         
-        echo "🔥 $PATTERN Displacement detected on $SYMBOL. Handing off to imbalance script..."
+        if [ "$ENABLE_HANDOFF" = true ]; then
+            echo "🔥 $PATTERN Displacement detected on $SYMBOL. Handing off to imbalance script..."
+            # Fire and forget the Hunter script
+            /usr/local/bin/imbalance.sh "$SYMBOL" "$PATTERN" "$C2_TIME" "$LOW" "$HIGH" "$FIB" &
+        else
+            echo "🔥 $PATTERN Displacement detected on $SYMBOL. Sending direct alert..."
+            # Convert PATTERN to lowercase for the Telegram message
+            LOWER_PATTERN=$(echo "$PATTERN" | tr '[:upper:]' '[:lower:]')
+            send_alert "ADAAA ENGULFING di OANDA GOLD (${LOWER_PATTERN})"
+        fi
         
-        # Fire and forget the Hunter script
-        /usr/local/bin/imbalance.sh "$SYMBOL" "$PATTERN" "$C2_TIME" "$LOW" "$HIGH" "$FIB" &
     else
         echo "⚪ ${SYMBOL}: ga ada engulfing H4."
     fi
