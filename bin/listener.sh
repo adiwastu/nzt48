@@ -91,19 +91,19 @@ while true; do
                 elif [ "$TEXT" = "/health" ]; then
                     API_URL="https://api.hotland3x3.my.id/account"
                     
-                    # Fetch the account payload
-                    RESP=$(curl -s -L --max-time 10 "$API_URL")
+                    # Super simple curl
+                    RESP=$(curl -s "$API_URL")
                     
                     if [ -z "$RESP" ]; then
-                        MSG="🔴 API is DOWN (Timeout/No Response)"
+                        MSG="🔴 API is DOWN (No Response)"
                     elif ! echo "$RESP" | jq empty 2>/dev/null; then
                         MSG="⚠️ API is STRUGGLING (Returned HTML/Garbage, not JSON)"
                     else
-                        # Try to extract the balance
-                        BALANCE=$(echo "$RESP" | jq -r '.balance // empty')
+                        # Extract the balance from inside the 'data' wrapper
+                        BALANCE=$(echo "$RESP" | jq -r '.data.balance // empty')
                         
                         if [ -n "$BALANCE" ]; then
-                            CURRENCY=$(echo "$RESP" | jq -r '.currency // "USD"')
+                            CURRENCY=$(echo "$RESP" | jq -r '.data.currency // "USD"')
                             MSG="🟢 API is ONLINE (Balance: ${BALANCE} ${CURRENCY})"
                         else
                             MSG="⚠️ API is ONLINE, but could not read the account balance."

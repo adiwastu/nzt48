@@ -4,15 +4,14 @@ source /etc/nzt48/.env
 
 API_URL="https://api.hotland3x3.my.id/account"
 
-# Fetch the account payload
-RESP=$(curl -s -L --max-time 15 "$API_URL")
+# Super simple curl
+RESP=$(curl -s "$API_URL")
 
-# Extract balance safely. If it fails or is missing, BALANCE becomes empty.
-BALANCE=$(echo "$RESP" | jq -r '.balance // empty' 2>/dev/null)
+# Extract balance safely from inside the 'data' wrapper
+BALANCE=$(echo "$RESP" | jq -r '.data.balance // empty' 2>/dev/null)
 
 if [ -z "$BALANCE" ]; then
     
-    # Grab a tiny snippet of the bad response to help you debug
     SNIPPET="${RESP:0:60}"
     [ -z "$SNIPPET" ] && SNIPPET="(Empty Response)"
     
@@ -20,7 +19,6 @@ if [ -z "$BALANCE" ]; then
 Your MT5 API is reachable, but the /account endpoint failed!
 Response: ${SNIPPET}..."
 
-    # Broadcast to all subscribers
     while read -r ID; do
         [ -z "$ID" ] && continue
         curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
