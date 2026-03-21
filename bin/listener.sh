@@ -88,32 +88,47 @@ while true; do
                     echo "Replied to $CHAT_ID with next scan time."
                 
                 # --- NEW HEALTH COMMAND ---
+                # --- NEW HEALTH COMMAND ---
                 elif [ "$TEXT" = "/health" ]; then
-                    API_URL="https://api.hotland3x3.my.id/account"
+                    APIS=(
+                        "5k|https://api.hotland3x3.my.id/account"
+                        "10k|https://api-5ers.hotland3x3.my.id/account"
+                        "100k|https://api-raven.hotland3x3.my.id/account"
+                    )
                     
-                    # Super simple curl
-                    RESP=$(curl -s "$API_URL")
+                    # Start the message header
+                    MSG="🏥 NZT-48 API Status Board:
+"
                     
-                    if [ -z "$RESP" ]; then
-                        MSG="🔴 API is DOWN (No Response)"
-                    elif ! echo "$RESP" | jq empty 2>/dev/null; then
-                        MSG="⚠️ API is STRUGGLING (Returned HTML/Garbage, not JSON)"
-                    else
-                        # Extract the balance from inside the 'data' wrapper
-                        BALANCE=$(echo "$RESP" | jq -r '.data.balance // empty')
+                    for entry in "${APIS[@]}"; do
+                        NICKNAME="${entry%%|*}"
+                        API_URL="${entry##*|}"
                         
-                        if [ -n "$BALANCE" ]; then
-                            CURRENCY=$(echo "$RESP" | jq -r '.data.currency // "USD"')
-                            MSG="🟢 API is ONLINE (Balance: ${BALANCE} ${CURRENCY})"
+                        RESP=$(curl -s --max-time 10 "$API_URL")
+                        
+                        if [ -z "$RESP" ]; then
+                            MSG="${MSG}🔴 ${NICKNAME}: DOWN (Timeout)
+"
+                        elif ! echo "$RESP" | jq empty 2>/dev/null; then
+                            MSG="${MSG}⚠️ ${NICKNAME}: STRUGGLING (Garbage JSON)
+"
                         else
-                            MSG="⚠️ API is ONLINE, but could not read the account balance."
+                            BALANCE=$(echo "$RESP" | jq -r '.data.balance // empty')
+                            if [ -n "$BALANCE" ]; then
+                                CURRENCY=$(echo "$RESP" | jq -r '.data.currency // "USD"')
+                                MSG="${MSG}🟢 ${NICKNAME}: ONLINE (${BALANCE} ${CURRENCY})
+"
+                            else
+                                MSG="${MSG}⚠️ ${NICKNAME}: ONLINE (No Balance)
+"
+                            fi
                         fi
-                    fi
+                    done
                     
                     curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
                         -d chat_id="$CHAT_ID" \
                         -d text="$MSG" > /dev/null
-                    echo "Replied to $CHAT_ID with API health status."
+                    echo "Replied to $CHAT_ID with multi-API health status."
                 fi
             fi
         done

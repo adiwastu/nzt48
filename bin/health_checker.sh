@@ -2,22 +2,42 @@
 
 source /etc/nzt48/.env
 
-API_URL="https://api.hotland3x3.my.id/account"
+# Format: "Nickname|URL"
+APIS=(
+    "5k|https://api.hotland3x3.my.id/account"
+    "10k|https://api-5ers.hotland3x3.my.id/account"
+    "100k|https://api-raven.hotland3x3.my.id/account"
+)
 
-# Super simple curl
-RESP=$(curl -s "$API_URL")
+ERROR_LOG=""
 
-# Extract balance safely from inside the 'data' wrapper
-BALANCE=$(echo "$RESP" | jq -r '.data.balance // empty' 2>/dev/null)
-
-if [ -z "$BALANCE" ]; then
+for entry in "${APIS[@]}"; do
+    NICKNAME="${entry%%|*}"
+    API_URL="${entry##*|}"
     
-    SNIPPET="${RESP:0:60}"
-    [ -z "$SNIPPET" ] && SNIPPET="(Empty Response)"
+    # Super simple curl with a 15s timeout
+    RESP=$(curl -s --max-time 15 "$API_URL")
     
-    MSG="🚨 HEALTH CHECK FAILED 🚨
-Your MT5 API is reachable, but the /account endpoint failed!
-Response: ${SNIPPET}..."
+    # Extract balance safely
+    BALANCE=$(echo "$RESP" | jq -r '.data.balance // empty' 2>/dev/null)
+    
+    if [ -z "$BALANCE" ]; then
+        SNIPPET="${RESP:0:40}"
+        [ -z "$SNIPPET" ] && SNIPPET="(Empty Response)"
+        
+        ERROR_LOG="${ERROR_LOG}❌ ${NICKNAME}: Failed! Resp: ${SNIPPET}...
+"
+        echo "$(date): Health Check Failed - ${NICKNAME}"
+    fi
+done
+
+# If ERROR_LOG is not empty, at least one API failed. Send the alert.
+if [ -n "$ERROR_LOG" ]; then
+    
+    MSG="🚨 API HEALTH ALERT 🚨
+One or more of your MT5 connections are down:
+
+${ERROR_LOG}"
 
     while read -r ID; do
         [ -z "$ID" ] && continue
@@ -25,6 +45,4 @@ Response: ${SNIPPET}..."
             -d chat_id="${ID}" \
             -d text="${MSG}" > /dev/null
     done < /etc/nzt48/subscribers.txt
-    
-    echo "$(date): Health Check Failed - Account Balance Missing"
 fi
