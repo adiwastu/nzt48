@@ -89,17 +89,25 @@ while true; do
                 
                 # --- NEW HEALTH COMMAND ---
                 elif [ "$TEXT" = "/health" ]; then
-                    API_URL="https://api.hotland3x3.my.id/fetch_data_pos?symbol=USDJPY&timeframe=H4&num_bars=1"
+                    API_URL="https://api.hotland3x3.my.id/account"
                     
-                    # Ping the API and grab the HTTP status code (timeout 10s)
-                    HTTP_STATUS=$(curl -o /dev/null -s -w "%{http_code}" --max-time 10 "$API_URL")
+                    # Fetch the account payload
+                    RESP=$(curl -s -L --max-time 10 "$API_URL")
                     
-                    if [ "$HTTP_STATUS" -eq 200 ]; then
-                        MSG="🟢 API is ONLINE (HTTP 200 OK)"
-                    elif [ "$HTTP_STATUS" -eq 000 ]; then
-                        MSG="🔴 API is DOWN (Timeout/Unreachable)"
+                    if [ -z "$RESP" ]; then
+                        MSG="🔴 API is DOWN (Timeout/No Response)"
+                    elif ! echo "$RESP" | jq empty 2>/dev/null; then
+                        MSG="⚠️ API is STRUGGLING (Returned HTML/Garbage, not JSON)"
                     else
-                        MSG="⚠️ API is STRUGGLING (HTTP $HTTP_STATUS)"
+                        # Try to extract the balance
+                        BALANCE=$(echo "$RESP" | jq -r '.balance // empty')
+                        
+                        if [ -n "$BALANCE" ]; then
+                            CURRENCY=$(echo "$RESP" | jq -r '.currency // "USD"')
+                            MSG="🟢 API is ONLINE (Balance: ${BALANCE} ${CURRENCY})"
+                        else
+                            MSG="⚠️ API is ONLINE, but could not read the account balance."
+                        fi
                     fi
                     
                     curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \

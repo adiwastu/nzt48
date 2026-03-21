@@ -2,15 +2,23 @@
 
 source /etc/nzt48/.env
 
-API_URL="https://api.hotland3x3.my.id/fetch_data_pos?symbol=USDJPY&timeframe=H4&num_bars=1"
+API_URL="https://api.hotland3x3.my.id/account"
 
-# Check the HTTP status code
-HTTP_STATUS=$(curl -o /dev/null -s -w "%{http_code}" --max-time 15 "$API_URL")
+# Fetch the account payload
+RESP=$(curl -s -L --max-time 15 "$API_URL")
 
-if [ "$HTTP_STATUS" -ne 200 ]; then
+# Extract balance safely. If it fails or is missing, BALANCE becomes empty.
+BALANCE=$(echo "$RESP" | jq -r '.balance // empty' 2>/dev/null)
+
+if [ -z "$BALANCE" ]; then
+    
+    # Grab a tiny snippet of the bad response to help you debug
+    SNIPPET="${RESP:0:60}"
+    [ -z "$SNIPPET" ] && SNIPPET="(Empty Response)"
+    
     MSG="🚨 HEALTH CHECK FAILED 🚨
-Your MT5 API is currently unresponsive!
-HTTP Status: ${HTTP_STATUS}"
+Your MT5 API is reachable, but the /account endpoint failed!
+Response: ${SNIPPET}..."
 
     # Broadcast to all subscribers
     while read -r ID; do
@@ -20,5 +28,5 @@ HTTP Status: ${HTTP_STATUS}"
             -d text="${MSG}" > /dev/null
     done < /etc/nzt48/subscribers.txt
     
-    echo "$(date): Health Check Failed ($HTTP_STATUS)"
+    echo "$(date): Health Check Failed - Account Balance Missing"
 fi
