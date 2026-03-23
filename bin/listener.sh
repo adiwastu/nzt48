@@ -44,14 +44,13 @@ get_next_scan() {
     if [ $diff -lt 0 ]; then
         echo "Server OK. Next scheduled scan: ${formatted} (already passed, should fire soon?)"
     elif [ $minutes -lt 1 ]; then
-        echo "Server OK. Next scheduled scan: ${formatted} (in less than a minute)"
+        echo "Server OK. Next scheduled scan in less than a minute"
     elif [ $minutes -ge 60 ]; then
-        # NEW LOGIC: Calculate hours and remainder minutes
         local hours=$((minutes / 60))
         local rem_mins=$((minutes % 60))
-        echo "Server OK. Next scheduled scan: ${formatted} (in ${hours}h ${rem_mins}m)"
+        echo "Server OK. Next scheduled scan in ${hours}h ${rem_mins}m"
     else
-        echo "Server OK. Next scheduled scan: ${formatted} (in ${minutes} minutes)"
+        echo "Server OK. Next scheduled scan in ${minutes} minutes"
     fi
 }
 
