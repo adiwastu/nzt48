@@ -97,7 +97,7 @@ while true; do
                     )
                     
                     # Start the message header
-                    MSG="🏥 NZT-48 API Status Board:
+                    MSG="API status board:
 "
                     
                     for entry in "${APIS[@]}"; do
@@ -116,7 +116,7 @@ while true; do
                             BALANCE=$(echo "$RESP" | jq -r '.data.balance // empty')
                             if [ -n "$BALANCE" ]; then
                                 CURRENCY=$(echo "$RESP" | jq -r '.data.currency // "USD"')
-                                MSG="${MSG}🟢 ${NICKNAME}: Ok)
+                                MSG="${MSG}🟢 ${NICKNAME}: Ok
 "
                             else
                                 MSG="${MSG}⚠️ ${NICKNAME}: ONLINE (No)
