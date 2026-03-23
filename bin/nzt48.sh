@@ -72,7 +72,8 @@ for SYMBOL in "${SYMBOLS[@]}"; do
                 ICON="🔴"
             fi
             
-            send_alert "${ICON}4H ${PATTERN} ENGULF on OANDA"
+            # ---> SYMBOL ADDED HERE <---
+            send_alert "${ICON}4H ${PATTERN} ENGULF ${SYMBOL} on OANDA"
         fi
         
     else
