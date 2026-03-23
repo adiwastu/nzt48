@@ -10,6 +10,7 @@ touch $OFFSET_FILE
 echo "Starting NZT-48 Telegram Listener..."
 
 # Function to get the next scheduled run of nzt48.timer with minutes left
+# Function to get the next scheduled run of nzt48.timer with minutes left
 get_next_scan() {
     local timer_line=$(systemctl list-timers nzt48.timer --no-legend 2>/dev/null | head -n1)
     if [ -z "$timer_line" ]; then
@@ -44,6 +45,11 @@ get_next_scan() {
         echo "Server OK. Next scheduled scan: ${formatted} (already passed, should fire soon?)"
     elif [ $minutes -lt 1 ]; then
         echo "Server OK. Next scheduled scan: ${formatted} (in less than a minute)"
+    elif [ $minutes -ge 60 ]; then
+        # NEW LOGIC: Calculate hours and remainder minutes
+        local hours=$((minutes / 60))
+        local rem_mins=$((minutes % 60))
+        echo "Server OK. Next scheduled scan: ${formatted} (in ${hours}h ${rem_mins}m)"
     else
         echo "Server OK. Next scheduled scan: ${formatted} (in ${minutes} minutes)"
     fi
