@@ -116,10 +116,10 @@ while true; do
                             BALANCE=$(echo "$RESP" | jq -r '.data.balance // empty')
                             if [ -n "$BALANCE" ]; then
                                 CURRENCY=$(echo "$RESP" | jq -r '.data.currency // "USD"')
-                                MSG="${MSG}🟢 ${NICKNAME}: ONLINE (${BALANCE} ${CURRENCY})
+                                MSG="${MSG}🟢 ${NICKNAME}: Ok)
 "
                             else
-                                MSG="${MSG}⚠️ ${NICKNAME}: ONLINE (No Balance)
+                                MSG="${MSG}⚠️ ${NICKNAME}: ONLINE (No)
 "
                             fi
                         fi
