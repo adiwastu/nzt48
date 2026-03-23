@@ -77,7 +77,7 @@ while true; do
                         echo "$CHAT_ID" >> "$SUBS_FILE"
                         curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
                             -d chat_id="$CHAT_ID" \
-                            -d text="You are now taking NZT-48." > /dev/null
+                            -d text="OANDA Gold H4 engulfing alert sudah live. Kirim /check untuk lihat kapan H4 berikutnya" > /dev/null
                         echo "New subscriber added: $CHAT_ID"
                     fi
                 elif [ "$TEXT" = "/check" ]; then
@@ -91,9 +91,9 @@ while true; do
                 # --- NEW HEALTH COMMAND ---
                 elif [ "$TEXT" = "/health" ]; then
                     APIS=(
-                        "5k|https://api.hotland3x3.my.id/account"
-                        "10k|https://api-5ers.hotland3x3.my.id/account"
-                        "100k|https://api-raven.hotland3x3.my.id/account"
+                        "A|https://api.hotland3x3.my.id/account"
+                        "B|https://api-5ers.hotland3x3.my.id/account"
+                        "C|https://api-raven.hotland3x3.my.id/account"
                     )
                     
                     # Start the message header
