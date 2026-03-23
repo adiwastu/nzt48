@@ -4,7 +4,7 @@
 source /etc/nzt48/.env
 
 # --- CONFIG ---
-SYMBOLS=("XAUUSD")
+SYMBOLS=("XAUUSD" "BTCUSD")
 TIMEFRAME="H4" 
 
 # Set this to 'true' to chain scripts, or 'false' to just get a plain Telegram alert
@@ -64,9 +64,15 @@ for SYMBOL in "${SYMBOLS[@]}"; do
             /usr/local/bin/imbalance.sh "$SYMBOL" "$PATTERN" "$C2_TIME" "$LOW" "$HIGH" "$FIB" &
         else
             echo "🔥 $PATTERN Displacement detected on $SYMBOL. Sending direct alert..."
-            # Convert PATTERN to lowercase for the Telegram message
-            LOWER_PATTERN=$(echo "$PATTERN" | tr '[:upper:]' '[:lower:]')
-            send_alert "ADAAA ENGULFING di GOLD (OANDA) GOLD (${LOWER_PATTERN})"
+            
+            # Pick the right icon for the hardcoded OANDA message
+            if [ "$PATTERN" == "BULLISH" ]; then
+                ICON="🟢"
+            else
+                ICON="🔴"
+            fi
+            
+            send_alert "${ICON}4H ${PATTERN} ENGULF on OANDA"
         fi
         
     else
