@@ -2,8 +2,8 @@
 Description=Run NZT-48 on H4 Closes (UTC Grid)
 
 [Timer]
-# Fires at exactly :01, :02, and :03 minutes past your target hours
-OnCalendar=*-*-* 01,05,09,13,17,21:01,02,03:00
+# Fires at exactly :02 and :03 minutes past your target hours
+OnCalendar=*-*-* 01,05,09,13,17,21:02,03:00
 Persistent=true
 
 [Install]
