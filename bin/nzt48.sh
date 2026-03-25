@@ -10,6 +10,9 @@ TIMEFRAME="H4"
 # Set this to 'true' to chain scripts, or 'false' to just get a plain Telegram alert
 ENABLE_HANDOFF=false
 
+# Capture the exact minute the script was triggered
+CURRENT_MIN=$(date +"%M")
+
 CURRENT_TIME=$(date +"%Y-%m-%d %H:%M:%S %Z")
 echo "[${CURRENT_TIME}] V0.2: Scanning H4 Displacement..."
 
@@ -63,13 +66,20 @@ for SYMBOL in "${SYMBOLS[@]}"; do
         echo "   [Candle 1] O: $C1_O | H: $C1_H | L: $C1_L | C: $C1_C"
         echo "   [Candle 2] O: $C2_O | H: $C2_H | L: $C2_L | C: $C2_C"
         
-        if [ "$ENABLE_HANDOFF" = true ]; then
-            echo "   -> Handing off to imbalance script..."
-            /usr/local/bin/imbalance.sh "$SYMBOL" "$PATTERN" "$C2_TIME" "$LOW" "$HIGH" "$FIB" &
+        # --- THE FAKE RUN INTERCEPTOR ---
+        # Checks if the current minute is 01 or 02 (to safely catch your first trigger)
+        if [ "$CURRENT_MIN" == "01" ] || [ "$CURRENT_MIN" == "02" ]; then
+            echo "   -> [FAKE RUN] Internal logic verified. Suppressing Telegram and Handoff."
         else
-            echo "   -> Sending direct alert..."
-            if [ "$PATTERN" == "BULLISH" ]; then ICON="🟢"; else ICON="🔴"; fi
-            send_alert "${ICON}4H ${PATTERN} ENGULF ${SYMBOL} on OANDA"
+            # --- REAL RUN EXECUTION ---
+            if [ "$ENABLE_HANDOFF" = true ]; then
+                echo "   -> Handing off to imbalance script..."
+                /usr/local/bin/imbalance.sh "$SYMBOL" "$PATTERN" "$C2_TIME" "$LOW" "$HIGH" "$FIB" &
+            else
+                echo "   -> Sending direct alert..."
+                if [ "$PATTERN" == "BULLISH" ]; then ICON="🟢"; else ICON="🔴"; fi
+                send_alert "${ICON}4H ${PATTERN} ENGULF ${SYMBOL} on OANDA"
+            fi
         fi
         
     else
