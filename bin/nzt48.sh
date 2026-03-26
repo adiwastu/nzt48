@@ -10,11 +10,24 @@ TIMEFRAME="H4"
 # Set this to 'true' to chain scripts, or 'false' to just get a plain Telegram alert
 ENABLE_HANDOFF=false
 
+# --- LOGGING SETUP ---
+LOG_DIR="/etc/nzt48/logs"
+mkdir -p "$LOG_DIR" # Ensure the folder exists
+TODAY=$(date +"%Y-%m-%d")
+LOG_FILE="${LOG_DIR}/${TODAY}.log"
+
 # Capture the exact minute the script was triggered
 CURRENT_MIN=$(date +"%M")
-
 CURRENT_TIME=$(date +"%Y-%m-%d %H:%M:%S %Z")
-echo "[${CURRENT_TIME}] V0.2: Scanning H4 Displacement..."
+
+# Determine if this is the Dry Run or the Real Run
+if [ "$CURRENT_MIN" == "01" ]; then
+    RUN_TYPE="DRY RUN"
+else
+    RUN_TYPE="REAL RUN"
+fi
+
+echo "[$CURRENT_TIME] V0.3: Scanning H4 Displacement ($RUN_TYPE)..."
 
 # --- TELEGRAM BROADCAST FUNCTION ---
 send_alert() {
@@ -58,20 +71,38 @@ for SYMBOL in "${SYMBOLS[@]}"; do
     # Read all variables split by the '|' character
     IFS='|' read -r PATTERN C2_TIME LOW HIGH C1_O C1_H C1_L C1_C C2_O C2_H C2_L C2_C <<< "$RESULT"
 
+    # --- FORMAT DAILY LOG ENTRY ---
+    if [ "$PATTERN" == "BULLISH" ]; then STATUS="🟢 BULLISH ENGULFING"
+    elif [ "$PATTERN" == "BEARISH" ]; then STATUS="🔴 BEARISH ENGULFING"
+    else STATUS="⚪ NO ENGULFING"; fi
+
+    # Write the beautifully formatted block to today's text file
+    echo "--------------------------------------------------------------------------------" >> "$LOG_FILE"
+    echo "TIME     : ${CURRENT_TIME} [${RUN_TYPE}]" >> "$LOG_FILE"
+    echo "SYMBOL   : ${SYMBOL}" >> "$LOG_FILE"
+    echo "STATUS   : ${STATUS}" >> "$LOG_FILE"
+    if [ "$C2_TIME" != "null" ]; then
+        echo "CANDLE 1 : O: $C1_O | H: $C1_H | L: $C1_L | C: $C1_C" >> "$LOG_FILE"
+        echo "CANDLE 2 : O: $C2_O | H: $C2_H | L: $C2_L | C: $C2_C" >> "$LOG_FILE"
+    else
+        echo "CANDLE   : NO VALID DATA RETURNED" >> "$LOG_FILE"
+    fi
+    echo "--------------------------------------------------------------------------------" >> "$LOG_FILE"
+
+
+    # --- EXECUTE LOGIC ---
     if [ "$PATTERN" != "NONE" ]; then
         FIB=$(awk "BEGIN {print ($HIGH + $LOW) / 2}")
         
-        # --- LOGGING TO CONSOLE (ENGULFING FOUND) ---
+        # Logging to Console
         echo "🔥 $PATTERN Displacement detected on $SYMBOL."
         echo "   [Candle 1] O: $C1_O | H: $C1_H | L: $C1_L | C: $C1_C"
         echo "   [Candle 2] O: $C2_O | H: $C2_H | L: $C2_L | C: $C2_C"
         
-        # --- THE FAKE RUN INTERCEPTOR ---
-        # Checks if the current minute is 01 or 02 (to safely catch your first trigger)
-        if [ "$CURRENT_MIN" == "01" ] || [ "$CURRENT_MIN" == "02" ]; then
+        # The Interceptor
+        if [ "$RUN_TYPE" == "DRY RUN" ]; then
             echo "   -> [FAKE RUN] Internal logic verified. Suppressing Telegram and Handoff."
         else
-            # --- REAL RUN EXECUTION ---
             if [ "$ENABLE_HANDOFF" = true ]; then
                 echo "   -> Handing off to imbalance script..."
                 /usr/local/bin/imbalance.sh "$SYMBOL" "$PATTERN" "$C2_TIME" "$LOW" "$HIGH" "$FIB" &
@@ -83,9 +114,8 @@ for SYMBOL in "${SYMBOLS[@]}"; do
         fi
         
     else
-        # --- LOGGING TO CONSOLE (NO ENGULFING) ---
+        # Logging to Console (No Engulfing)
         echo "⚪ ${SYMBOL}: ga ada engulfing H4."
-        # Only print the OHLC if we actually pulled valid data
         if [ "$C2_TIME" != "null" ]; then
             echo "   [Candle 1] O: $C1_O | H: $C1_H | L: $C1_L | C: $C1_C"
             echo "   [Candle 2] O: $C2_O | H: $C2_H | L: $C2_L | C: $C2_C"

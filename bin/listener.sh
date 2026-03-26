@@ -10,7 +10,6 @@ touch $OFFSET_FILE
 echo "Starting NZT-48 Telegram Listener..."
 
 # Function to get the next scheduled run of nzt48.timer with minutes left
-# Function to get the next scheduled run of nzt48.timer with minutes left
 get_next_scan() {
     local timer_line=$(systemctl list-timers nzt48.timer --no-legend 2>/dev/null | head -n1)
     if [ -z "$timer_line" ]; then
@@ -93,7 +92,6 @@ while true; do
                     echo "Replied to $CHAT_ID with next scan time."
                 
                 # --- NEW HEALTH COMMAND ---
-                # --- NEW HEALTH COMMAND ---
                 elif [ "$TEXT" = "/health" ]; then
                     APIS=(
                         "A|https://api.hotland3x3.my.id/account"
@@ -134,6 +132,26 @@ while true; do
                         -d chat_id="$CHAT_ID" \
                         -d text="$MSG" > /dev/null
                     echo "Replied to $CHAT_ID with multi-API health status."
+                
+                # --- NEW LOGS COMMAND ---
+                elif [ "$TEXT" = "/logs" ]; then
+                    TODAY=$(date +"%Y-%m-%d")
+                    LOG_FILE="/etc/nzt48/logs/${TODAY}.log"
+                    
+                    if [ -f "$LOG_FILE" ]; then
+                        # Read the file and add a nice header
+                        LOG_CONTENT=$(cat "$LOG_FILE")
+                        MSG="📄 *Daily Engine Logs (${TODAY})*
+
+${LOG_CONTENT}"
+                    else
+                        MSG="📭 No logs found for today (${TODAY}). The scanner hasn't run yet or the log directory is empty."
+                    fi
+                    
+                    curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+                        -d chat_id="$CHAT_ID" \
+                        -d text="$MSG" > /dev/null
+                    echo "Replied to $CHAT_ID with today's logs."
                 fi
             fi
         done

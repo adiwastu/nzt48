@@ -46,3 +46,7 @@ systemd automation
 /etc/systemd/system/nzt48.service
 /etc/systemd/system/nzt48.timer
 /etc/systemd/system/listener.service
+
+
+how to read
+cat /etc/nzt48/logs/$(date +"%Y-%m-%d").log
