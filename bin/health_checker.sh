@@ -4,9 +4,9 @@ source /etc/nzt48/.env
 
 # Format: "Nickname|URL"
 APIS=(
-    "5k|https://api.hotland3x3.my.id/account"
-    "10k|https://api-5ers.hotland3x3.my.id/account"
-    "100k|https://api-raven.hotland3x3.my.id/account"
+    "A|https://api.hotland3x3.my.id/account"
+    "B|https://api-5ers.hotland3x3.my.id/account"
+    "C|https://api-raven.hotland3x3.my.id/account"
 )
 
 ERROR_LOG=""
