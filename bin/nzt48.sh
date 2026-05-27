@@ -4,7 +4,7 @@
 source /etc/nzt48/.env
 
 # --- CONFIG ---
-SYMBOLS=("XAUUSD" "USDJPY")
+SYMBOLS=("XAUUSD")
 TIMEFRAME="H4" 
 
 # Set this to 'true' to chain scripts, or 'false' to just get a plain Telegram alert
